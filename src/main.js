@@ -133,10 +133,10 @@ function questionTemplate(question, index) {
   const value = state.answers[question.id];
   return `
     <fieldset class="question-card">
-      <legend>
-        <span>${String(index + 1).padStart(2, "0")}</span>
-        ${question.text}
-      </legend>
+      <div class="question-title">
+        <span aria-hidden="true">${String(index + 1).padStart(2, "0")}</span>
+        <p>${question.text}</p>
+      </div>
       <div class="likert" role="radiogroup" aria-label="${question.text}">
         ${bigFiveTest.scale
           .map((label, scaleIndex) => {
