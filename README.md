@@ -1,18 +1,27 @@
 # MindScope Big-Five MVP
 
-Eine moderne, responsive Web-App für psychologische Selbstanalyse. Nutzerinnen und Nutzer beantworten einen Big-Five-Test mit 40 Aussagen auf einer Likert-Skala von 1 bis 5 und erhalten danach ein persönliches Dashboard mit Radar-Chart, Stärken, Entwicklungsfeldern und verständlichem Bericht.
+Eine moderne, responsive Web-App für psychologische Selbstanalyse. Nutzerinnen und Nutzer wählen zwischen mehreren Selbstberichtsinstrumenten und erhalten danach ein persönliches Dashboard mit Diagramm, Stärken, Aufmerksamkeitsfeldern und verständlichem Bericht.
 
 ## Funktionen
 
-- Big-Five-Test mit 40 wissenschaftlich orientierten Aussagen
+- Testauswahl mit Big Five, Rosenberg Self-Esteem Scale, WHO-5 und DASS-21
 - Reverse-Scoring für ausgewählte Items
-- Auswertung der Dimensionen Offenheit, Gewissenhaftigkeit, Extraversion, Verträglichkeit und Neurotizismus
+- Dynamische Auswertung je nach Testdimensionen
 - Werte von 0 bis 100 pro Dimension
-- Canvas-basiertes Radar-Chart ohne externe Abhängigkeiten
+- Canvas-basierte Radar- und Balken-Charts ohne externe Abhängigkeiten
 - Automatisch generierter Persönlichkeitsbericht ohne klinische Sprache
 - Empfehlungen für Beruf, Lernen, Beziehungen und persönliche Entwicklung
 - Beispieldaten für eine schnelle Demo
 - Erweiterbare Teststruktur für spätere Module
+
+## Eingebundene Instrumente
+
+- Big Five: aktuelle MVP-Items, perspektivisch durch IPIP-basierte Items ersetzbar.
+- Rosenberg Self-Esteem Scale (RSES): 10 Items zur globalen Selbstwertschätzung, Public Domain laut University of Maryland.
+- WHO-5 Well-Being Index: 5 Items zum Wohlbefinden in den letzten zwei Wochen, WHO-Selbstberichtsinstrument.
+- DASS-21: 21 Items zu Stress, Angst und depressiver Belastung, Public Domain laut offizieller DASS-Seite.
+
+Die App formuliert Ergebnisse als Selbstreflexion und Screening-Hinweise. Sie ersetzt keine Diagnostik, Beratung oder Behandlung.
 
 ## Lokal starten
 
@@ -73,13 +82,11 @@ https://DEIN-USERNAME.github.io/REPOSITORY-NAME/
 
 Weitere Tests können als eigene Testdefinitionen ergänzt werden. Ein Test sollte mindestens `id`, `title`, `scale` und `questions` enthalten. Die Scoring-Logik kann pro Testtyp erweitert oder ausgetauscht werden, ohne dass Dashboard und Bericht komplett neu gebaut werden müssen.
 
-Geplante Module:
+Weitere geplante Module:
 
-- Selbstwert
-- Stress
 - Bindungsstil
-- Lebenszufriedenheit
 - Werte-Test
+- IPIP Big Five Upgrade
 
 ## Monetarisierungsmodelle
 
@@ -91,4 +98,4 @@ Geplante Module:
 
 ## Hinweis
 
-Die App dient der Selbstreflexion und persönlichen Entwicklung. Sie ersetzt keine psychologische Diagnostik, Beratung oder medizinische Behandlung.
+Die App dient der Selbstreflexion und persönlichen Entwicklung. Sie ersetzt keine psychologische Diagnostik, Beratung oder medizinische Behandlung. Für produktive fachliche Nutzung sollten Itemformulierungen, Quellenangaben, Normbezüge und Interpretationsgrenzen vor Veröffentlichung psychologisch und rechtlich geprüft werden.

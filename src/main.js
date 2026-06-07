@@ -1,38 +1,55 @@
-import { bigFiveTest, plannedTests, traits } from "./data/tests.js";
+import { plannedTests, tests } from "./data/tests.js";
 import { sampleAnswers } from "./data/sampleProfiles.js";
-import { calculateScores, getCompletion, rankTraits } from "./lib/scoring.js";
+import { calculateScores, getCompletion, rankDimensions, summaryScore } from "./lib/scoring.js";
 import { createReport } from "./lib/report.js";
 
+const testIds = Object.keys(tests);
 const state = {
-  answers: {},
+  activeTestId: "bigFive",
+  answersByTest: testIds.reduce((acc, id) => ({ ...acc, [id]: {} }), {}),
   view: "test",
   usingSample: false
 };
 
 const app = document.querySelector("#app");
 
+function activeTest() {
+  return tests[state.activeTestId];
+}
+
+function activeAnswers() {
+  return state.answersByTest[state.activeTestId] || {};
+}
+
 function setAnswer(questionId, value) {
-  state.answers = { ...state.answers, [questionId]: value };
+  state.answersByTest[state.activeTestId] = { ...activeAnswers(), [questionId]: value };
+  state.usingSample = false;
+  render();
+}
+
+function selectTest(testId) {
+  state.activeTestId = testId;
+  state.view = "test";
   state.usingSample = false;
   render();
 }
 
 function useSampleProfile() {
-  state.answers = { ...sampleAnswers };
+  state.answersByTest[state.activeTestId] = { ...sampleAnswers[state.activeTestId] };
   state.usingSample = true;
   state.view = "dashboard";
   render();
 }
 
 function resetTest() {
-  state.answers = {};
+  state.answersByTest[state.activeTestId] = {};
   state.usingSample = false;
   state.view = "test";
   render();
 }
 
 function showDashboard() {
-  const completion = getCompletion(bigFiveTest, state.answers);
+  const completion = getCompletion(activeTest(), activeAnswers());
   if (completion.percentage === 100) {
     state.view = "dashboard";
     render();
@@ -40,13 +57,14 @@ function showDashboard() {
 }
 
 function scoreModel() {
-  const scores = calculateScores(bigFiveTest, state.answers);
-  const ranked = rankTraits(scores);
-  return { scores, ranked, report: createReport(scores) };
+  const test = activeTest();
+  const scores = calculateScores(test, activeAnswers());
+  const ranked = rankDimensions(test, scores);
+  return { test, scores, ranked, report: createReport(test, scores) };
 }
 
 function render() {
-  const completion = getCompletion(bigFiveTest, state.answers);
+  const completion = getCompletion(activeTest(), activeAnswers());
   const canShowDashboard = completion.percentage === 100;
 
   app.innerHTML = `
@@ -71,18 +89,21 @@ function render() {
 
   bindEvents();
   if (state.view === "dashboard" && canShowDashboard) {
-    requestAnimationFrame(() => drawRadarChart(scoreModel().scores));
+    requestAnimationFrame(() => drawChart(scoreModel()));
   }
 }
 
 function testTemplate(completion) {
+  const test = activeTest();
+  const dimensionCount = Object.keys(test.dimensions).length;
+
   return `
     <section class="hero-band">
       <div class="shell hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow">MVP für digitale Selbstentwicklung</p>
-          <h1>${bigFiveTest.title}</h1>
-          <p>${bigFiveTest.subtitle} Die Auswertung ist alltagsnah formuliert und ersetzt keine Beratung oder Diagnostik.</p>
+          <p class="eyebrow">Validierte Selbstberichtsinstrumente</p>
+          <h1>${test.title}</h1>
+          <p>${test.subtitle} ${test.caution}</p>
           <div class="hero-actions">
             <button class="primary" data-action="scroll-test">Test starten</button>
             <button class="secondary" data-action="sample">Beispieldaten laden</button>
@@ -90,12 +111,12 @@ function testTemplate(completion) {
         </div>
         <aside class="insight-panel" aria-label="Testüberblick">
           <div>
-            <span class="metric">${bigFiveTest.questions.length}</span>
+            <span class="metric">${test.questions.length}</span>
             <span class="metric-label">Fragen</span>
           </div>
           <div>
-            <span class="metric">5</span>
-            <span class="metric-label">Dimensionen</span>
+            <span class="metric">${dimensionCount}</span>
+            <span class="metric-label">${dimensionCount === 1 ? "Wert" : "Dimensionen"}</span>
           </div>
           <div>
             <span class="metric">${completion.percentage}%</span>
@@ -105,6 +126,10 @@ function testTemplate(completion) {
       </div>
     </section>
 
+    <section class="shell test-switcher" aria-label="Testauswahl">
+      ${testIds.map((id) => testPillTemplate(tests[id])).join("")}
+    </section>
+
     <section class="shell test-layout" id="test">
       <div class="progress-panel">
         <div class="progress-head">
@@ -112,11 +137,16 @@ function testTemplate(completion) {
           <strong>${completion.percentage}%</strong>
         </div>
         <div class="progress-track"><span style="width:${completion.percentage}%"></span></div>
-        <p>Bewerte jede Aussage spontan danach, wie typisch sie für dich im Alltag ist.</p>
+        <p>${test.intro}</p>
+        <div class="source-box">
+          <strong>Quelle & Nutzung</strong>
+          <span>${test.source}</span>
+          <small>${test.license}</small>
+        </div>
       </div>
 
-      <form class="question-list" aria-label="Big-Five-Fragen">
-        ${bigFiveTest.questions.map(questionTemplate).join("")}
+      <form class="question-list" aria-label="${test.title}">
+        ${test.questions.map((question, index) => questionTemplate(test, question, index)).join("")}
       </form>
 
       <div class="sticky-actions">
@@ -129,26 +159,33 @@ function testTemplate(completion) {
   `;
 }
 
-function questionTemplate(question, index) {
-  const value = state.answers[question.id];
+function testPillTemplate(test) {
+  const completion = getCompletion(test, state.answersByTest[test.id] || {});
+  return `
+    <button class="test-pill ${state.activeTestId === test.id ? "active" : ""}" data-test-id="${test.id}">
+      <span>${test.shortTitle}</span>
+      <small>${test.category} · ${completion.percentage}%</small>
+    </button>
+  `;
+}
+
+function questionTemplate(test, question, index) {
+  const value = activeAnswers()[question.id];
   return `
     <fieldset class="question-card">
       <div class="question-title">
         <span aria-hidden="true">${String(index + 1).padStart(2, "0")}</span>
         <p>${question.text}</p>
       </div>
-      <div class="likert" role="radiogroup" aria-label="${question.text}">
-        ${bigFiveTest.scale
-          .map((label, scaleIndex) => {
-            const score = scaleIndex + 1;
-            return `
-              <label class="${value === score ? "selected" : ""}">
-                <input type="radio" name="${question.id}" value="${score}" ${value === score ? "checked" : ""} />
-                <span>${score}</span>
-                <small>${label}</small>
-              </label>
-            `;
-          })
+      <div class="likert scale-${test.scale.length}" role="radiogroup" aria-label="${question.text}">
+        ${test.scale
+          .map((option) => `
+            <label class="${value === option.value ? "selected" : ""}">
+              <input type="radio" name="${question.id}" value="${option.value}" ${value === option.value ? "checked" : ""} />
+              <span>${option.value}</span>
+              <small>${option.label}</small>
+            </label>
+          `)
           .join("")}
       </div>
     </fieldset>
@@ -156,23 +193,23 @@ function questionTemplate(question, index) {
 }
 
 function dashboardTemplate() {
-  const { scores, ranked, report } = scoreModel();
-  const average = Math.round(Object.values(scores).reduce((sum, value) => sum + value, 0) / 5);
+  const { test, scores, ranked, report } = scoreModel();
+  const average = summaryScore(scores);
   const top = ranked[0];
-  const growth = ranked[ranked.length - 1];
+  const focus = ranked.find((item) => item.polarity === "higherIsRisk") || ranked[ranked.length - 1];
 
   return `
     <section class="dashboard-hero">
       <div class="shell dashboard-head">
         <div>
           <p class="eyebrow">${state.usingSample ? "Beispielprofil" : "Persönliche Auswertung"}</p>
-          <h1>Dein Big-Five-Dashboard</h1>
+          <h1>${test.shortTitle}-Dashboard</h1>
           <p>${report.overview}</p>
         </div>
         <div class="score-summary" aria-label="Profilzusammenfassung">
-          <div><span>${average}</span><small>Profilindex</small></div>
+          <div><span>${average}</span><small>${test.scoreLabel}</small></div>
           <div><span>${top.score}</span><small>${top.label}</small></div>
-          <div><span>${growth.score}</span><small>${growth.label}</small></div>
+          <div><span>${focus.score}</span><small>${focus.label}</small></div>
         </div>
       </div>
     </section>
@@ -180,10 +217,10 @@ function dashboardTemplate() {
     <section class="shell dashboard-grid">
       <div class="chart-panel">
         <div class="section-title">
-          <span>Radar-Chart</span>
+          <span>${test.chart === "radar" ? "Radar-Chart" : "Score-Chart"}</span>
           <strong>0 bis 100</strong>
         </div>
-        <canvas id="radarChart" width="760" height="560" aria-label="Radar-Chart der Big-Five-Ergebnisse"></canvas>
+        <canvas id="resultChart" width="760" height="560" aria-label="Diagramm der Testergebnisse"></canvas>
       </div>
 
       <div class="trait-stack">
@@ -193,13 +230,13 @@ function dashboardTemplate() {
 
     <section class="shell split-section">
       <div>
-        <div class="section-title"><span>Stärken</span></div>
+        <div class="section-title"><span>${report.strengthsTitle}</span></div>
         <div class="mini-grid">
-          ${report.strengths.map((item) => signalCard(item, "Stärke")).join("")}
+          ${report.strengths.map((item) => signalCard(item, "Ressource")).join("")}
         </div>
       </div>
       <div>
-        <div class="section-title"><span>Entwicklungsfelder</span></div>
+        <div class="section-title"><span>${report.growthTitle}</span></div>
         <div class="mini-grid">
           ${report.growth.map((item) => signalCard(item, "Fokus")).join("")}
         </div>
@@ -208,7 +245,7 @@ function dashboardTemplate() {
 
     <section class="shell report-section">
       <div class="section-title">
-        <span>Persönlichkeitsbericht</span>
+        <span>Bericht & Empfehlungen</span>
         <button class="secondary" data-action="reset">Test neu starten</button>
       </div>
       <div class="report-list">
@@ -217,9 +254,9 @@ function dashboardTemplate() {
     </section>
 
     <section class="shell roadmap-section">
-      <div class="section-title"><span>Erweiterbare Testarchitektur</span></div>
+      <div class="section-title"><span>Weitere geplante Module</span></div>
       <div class="roadmap">
-        ${plannedTests.map((test) => `<span>${test}</span>`).join("")}
+        ${plannedTests.map((plannedTest) => `<span>${plannedTest}</span>`).join("")}
       </div>
     </section>
   `;
@@ -265,10 +302,18 @@ function reportSectionTemplate(section) {
   `;
 }
 
-// The chart is implemented locally so the MVP has no install step and stays easy to extend.
-function drawRadarChart(scores) {
-  const canvas = document.querySelector("#radarChart");
-  if (!canvas) return;
+function drawChart(model) {
+  if (model.test.chart === "radar" && Object.keys(model.test.dimensions).length > 2) {
+    drawRadarChart(model);
+    return;
+  }
+  drawBarChart(model);
+}
+
+// The charts are implemented locally so the MVP has no install step and stays easy to extend.
+function prepareCanvas() {
+  const canvas = document.querySelector("#resultChart");
+  if (!canvas) return null;
 
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
@@ -276,15 +321,20 @@ function drawRadarChart(scores) {
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  return { canvas, ctx, width: rect.width, height: rect.height };
+}
 
-  const width = rect.width;
-  const height = rect.height;
+function drawRadarChart({ test, scores }) {
+  const prepared = prepareCanvas();
+  if (!prepared) return;
+
+  const { ctx, width, height } = prepared;
   const center = { x: width / 2, y: height / 2 + 10 };
   const radius = Math.min(width, height) * 0.34;
-  const keys = Object.keys(traits);
+  const keys = Object.keys(test.dimensions);
   const step = (Math.PI * 2) / keys.length;
 
-  ctx.clearRect(0, 0, width, height);
   ctx.lineWidth = 1;
   ctx.font = "13px Inter, system-ui, sans-serif";
 
@@ -311,8 +361,8 @@ function drawRadarChart(scores) {
       y: center.y + Math.sin(angle) * radius
     };
     const labelPoint = {
-      x: center.x + Math.cos(angle) * (radius + 54),
-      y: center.y + Math.sin(angle) * (radius + 42)
+      x: center.x + Math.cos(angle) * (radius + 58),
+      y: center.y + Math.sin(angle) * (radius + 44)
     };
 
     ctx.beginPath();
@@ -321,9 +371,9 @@ function drawRadarChart(scores) {
     ctx.strokeStyle = "rgba(27, 39, 51, 0.12)";
     ctx.stroke();
 
-    ctx.fillStyle = traits[key].color;
+    ctx.fillStyle = test.dimensions[key].color;
     ctx.textAlign = labelPoint.x < center.x - 10 ? "right" : labelPoint.x > center.x + 10 ? "left" : "center";
-    ctx.fillText(`${traits[key].short} ${scores[key]}`, labelPoint.x, labelPoint.y);
+    ctx.fillText(`${test.dimensions[key].short} ${scores[key]}`, labelPoint.x, labelPoint.y);
   });
 
   ctx.beginPath();
@@ -337,7 +387,7 @@ function drawRadarChart(scores) {
     index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y);
   });
   ctx.closePath();
-  ctx.fillStyle = "rgba(15, 159, 143, 0.18)";
+  ctx.fillStyle = "rgba(15, 159, 143, 0.16)";
   ctx.strokeStyle = "#0f9f8f";
   ctx.lineWidth = 3;
   ctx.fill();
@@ -352,7 +402,7 @@ function drawRadarChart(scores) {
     };
     ctx.beginPath();
     ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = traits[key].color;
+    ctx.fillStyle = test.dimensions[key].color;
     ctx.fill();
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 2;
@@ -360,11 +410,63 @@ function drawRadarChart(scores) {
   });
 }
 
+function drawBarChart({ test, ranked }) {
+  const prepared = prepareCanvas();
+  if (!prepared) return;
+
+  const { ctx, width, height } = prepared;
+  const padding = 44;
+  const barHeight = 34;
+  const gap = 26;
+  const startY = height / 2 - ((barHeight + gap) * ranked.length) / 2;
+  const maxWidth = width - padding * 2;
+
+  ctx.font = "14px Inter, system-ui, sans-serif";
+  ranked.forEach((item, index) => {
+    const y = startY + index * (barHeight + gap);
+    ctx.fillStyle = "#64707d";
+    ctx.fillText(item.label, padding, y - 10);
+
+    ctx.fillStyle = "#e7ece8";
+    roundRect(ctx, padding, y, maxWidth, barHeight, 8);
+    ctx.fill();
+
+    ctx.fillStyle = item.color;
+    roundRect(ctx, padding, y, maxWidth * (item.score / 100), barHeight, 8);
+    ctx.fill();
+
+    ctx.fillStyle = "#17212b";
+    ctx.font = "800 20px Inter, system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(`${item.score}`, width - padding, y - 10);
+    ctx.textAlign = "left";
+    ctx.font = "14px Inter, system-ui, sans-serif";
+  });
+
+  ctx.fillStyle = "#64707d";
+  ctx.fillText(`${test.scoreLabel}: Werte von 0 bis 100`, padding, height - 32);
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + safeRadius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, safeRadius);
+  ctx.arcTo(x + width, y + height, x, y + height, safeRadius);
+  ctx.arcTo(x, y + height, x, y, safeRadius);
+  ctx.arcTo(x, y, x + width, y, safeRadius);
+  ctx.closePath();
+}
+
 function bindEvents() {
   app.querySelectorAll("input[type='radio']").forEach((input) => {
     input.addEventListener("change", (event) => {
       setAnswer(event.target.name, Number(event.target.value));
     });
+  });
+
+  app.querySelectorAll("[data-test-id]").forEach((button) => {
+    button.addEventListener("click", () => selectTest(button.dataset.testId));
   });
 
   app.querySelectorAll("[data-view]").forEach((button) => {
@@ -387,8 +489,8 @@ function bindEvents() {
 }
 
 window.addEventListener("resize", () => {
-  if (state.view === "dashboard" && getCompletion(bigFiveTest, state.answers).percentage === 100) {
-    drawRadarChart(scoreModel().scores);
+  if (state.view === "dashboard" && getCompletion(activeTest(), activeAnswers()).percentage === 100) {
+    drawChart(scoreModel());
   }
 });
 
